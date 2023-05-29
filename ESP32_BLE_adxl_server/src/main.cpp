@@ -30,7 +30,9 @@
 #define BRIGHTNESS  25
 CRGB leds[NUM_LEDS];
 
-const int sd_cs = 5; //Thing Plus C
+// SD card chip select
+const int sd_cs = 5;
+bool canLog = false;
 
 // Instantiate the accelerometer
 Adafruit_ADXL343 adxl = Adafruit_ADXL343(12345);
@@ -142,7 +144,7 @@ void initMAX17048()
 
 void appendFile(fs::FS &fs, const char * path, const char * message)
 {
-  Serial.printf("Appending to file: %s\n", path);
+  // Serial.printf("Appending to file: %s\n", path);
 
   File file = fs.open(path, FILE_APPEND);
   if(!file)
@@ -152,7 +154,7 @@ void appendFile(fs::FS &fs, const char * path, const char * message)
   }
   if(file.print(message))
   {
-    Serial.println("Message appended");
+    // Serial.println("Message appended");
   }
   else
   {
@@ -161,12 +163,12 @@ void appendFile(fs::FS &fs, const char * path, const char * message)
   file.close();
 }
 
-void data_logging()
+void logData()
 {
   Data = String(millis()) + "," + String(voltage) + "," + String(soc) + "," + String(event.acceleration.x) + "," + 
                 String(event.acceleration.x) + "," + String(event.acceleration.z) + "\r\n";
-  Serial.print("Save data: ");
-  Serial.println(Data);
+  // Serial.print("Save data: ");
+  // Serial.println(Data);
   appendFile(SD, "/logfile.txt", Data.c_str());
 }
 
@@ -223,6 +225,7 @@ void initSDCard()
     Serial.println("File exists");  
   }
   file.close();
+  canLog = true;
 }
 
 void setup()
@@ -292,61 +295,70 @@ void loop()
     FastLED.show();
   }
 
-  if (deviceConnected)
+  if ((millis() - lastTime) > timerDelay)
   {
-    if ((millis() - lastTime) > timerDelay)
+    // Read battery monitor data
+    // lipo.getVoltage() returns a voltage value (e.g. 3.93)
+    voltage = lipo.getVoltage();
+    // lipo.getSOC() returns the estimated state of charge (e.g. 79%)
+    soc = lipo.getSOC();
+
+    static char voltageStr[5];
+    dtostrf(voltage, 4, 2, voltageStr);
+    Serial.print("Voltage: ");
+    Serial.print(voltageStr);
+    Serial.print(" V,  ");
+
+    static char socStr[7];
+    dtostrf(soc, 4, 2, socStr);
+    Serial.print("Charge: ");
+    Serial.print(socStr);
+    Serial.print(" %,  ");
+
+    // Read accelerometer data
+    adxl.getEvent(&event);
+
+    // Notify X axis
+    static char xAxisStr[8];
+    dtostrf(event.acceleration.x, 8, 4, xAxisStr);
+    if (deviceConnected)
     {
-      // Read battery monitor data
-      // lipo.getVoltage() returns a voltage value (e.g. 3.93)
-      voltage = lipo.getVoltage();
-      // lipo.getSOC() returns the estimated state of charge (e.g. 79%)
-      soc = lipo.getSOC();
-
-      static char voltageStr[5];
-      dtostrf(voltage, 4, 2, voltageStr);
-      Serial.print("Voltage: ");
-      Serial.print(voltageStr);
-      Serial.print(" V,  ");
-
-      static char socStr[7];
-      dtostrf(soc, 4, 2, socStr);
-      Serial.print("Charge: ");
-      Serial.print(socStr);
-      Serial.print(" %,  ");
-
-      // Read accelerometer data
-      adxl.getEvent(&event);
-
-      // Notify X axis
-      static char xAxisStr[8];
-      dtostrf(event.acceleration.x, 8, 4, xAxisStr);
       accelerometerXCharacteristic.setValue(xAxisStr);
       accelerometerXCharacteristic.notify();
-      Serial.print("X: ");
-      Serial.print(xAxisStr);
-      Serial.print(" m/s^2");
+    }
+    Serial.print("X: ");
+    Serial.print(xAxisStr);
+    Serial.print(" m/s^2");
 
-      // Notify Y axis
-      static char yAxisStr[8];
-      dtostrf(event.acceleration.y, 8, 4, yAxisStr);
+    // Notify Y axis
+    static char yAxisStr[8];
+    dtostrf(event.acceleration.y, 8, 4, yAxisStr);
+    if (deviceConnected)
+    {
       accelerometerYCharacteristic.setValue(yAxisStr);
       accelerometerYCharacteristic.notify();
-      Serial.print("  Y: ");
-      Serial.print(yAxisStr);
-      Serial.print(" m/s^2");
+    }
+    Serial.print("  Y: ");
+    Serial.print(yAxisStr);
+    Serial.print(" m/s^2");
 
-      // Notify Z axis
-      static char zAxisStr[8];
-      dtostrf(event.acceleration.z, 8, 4, zAxisStr);
+    // Notify Z axis
+    static char zAxisStr[8];
+    dtostrf(event.acceleration.z, 8, 4, zAxisStr);
+    if (deviceConnected)
+    {
       accelerometerZCharacteristic.setValue(zAxisStr);
       accelerometerZCharacteristic.notify();
-      Serial.print("  Z: ");
-      Serial.print(zAxisStr);
-      Serial.println(" m/s^2");
+    }
+    Serial.print("  Z: ");
+    Serial.print(zAxisStr);
+    Serial.println(" m/s^2");
 
-      lastTime = millis();
+    lastTime = millis();
 
-      data_logging();
+    if (canLog)
+    {
+      logData();
     }
   }
 }
