@@ -15,6 +15,9 @@
 #include <Adafruit_ADXL343.h>
 #include <FastLED.h>
 #include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>
+#include <FS.h>
+#include <SD.h>
+#include <SPI.h>
 
 // BLE server name
 #define bleServerName "ESP32_ADXL343"
@@ -27,6 +30,8 @@
 #define BRIGHTNESS  25
 CRGB leds[NUM_LEDS];
 
+const int sd_cs = 5; //Thing Plus C
+
 // Instantiate the accelerometer
 Adafruit_ADXL343 adxl = Adafruit_ADXL343(12345);
 
@@ -35,13 +40,17 @@ SFE_MAX1704X lipo(MAX1704X_MAX17048);
 
 // Timer variables
 unsigned long lastTime = 0;
-unsigned long timerDelay = 5000;
+unsigned long timerDelay = 500;
 
 // Battery monitor variables
 double voltage = 0;
 double soc = 0;
 
+sensors_event_t event;
+
 bool deviceConnected = false;
+
+String Data;
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
@@ -131,6 +140,91 @@ void initMAX17048()
 	lipo.quickStart();
 }
 
+void appendFile(fs::FS &fs, const char * path, const char * message)
+{
+  Serial.printf("Appending to file: %s\n", path);
+
+  File file = fs.open(path, FILE_APPEND);
+  if(!file)
+  {
+    Serial.println("Failed to open file for appending");
+    return;
+  }
+  if(file.print(message))
+  {
+    Serial.println("Message appended");
+  }
+  else
+  {
+    Serial.println("Append failed");
+  }
+  file.close();
+}
+
+void data_logging()
+{
+  Data = String(millis()) + "," + String(voltage) + "," + String(soc) + "," + String(event.acceleration.x) + "," + 
+                String(event.acceleration.x) + "," + String(event.acceleration.z) + "\r\n";
+  Serial.print("Save data: ");
+  Serial.println(Data);
+  appendFile(SD, "/logfile.txt", Data.c_str());
+}
+
+void writeFile(fs::FS &fs, const char * path, const char * message)
+{
+  Serial.printf("Writing file: %s\n", path);
+
+  File file = fs.open(path, FILE_WRITE);
+  if(!file)
+  {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+  if(file.print(message))
+  {
+    Serial.println("File written");
+  }
+  else
+  {
+    Serial.println("Write failed");
+  }
+  file.close();
+}
+
+void initSDCard()
+{
+  if(!SD.begin(sd_cs))
+  {
+    Serial.println("Card Mount Failed");
+    return;
+  }
+  uint8_t cardType = SD.cardType();
+  if(cardType == CARD_NONE)
+  {
+    Serial.println("No SD card attached");
+    return;
+  }
+  Serial.println("Initializing SD card...");
+  if (!SD.begin())
+  {
+    Serial.println("SD card initialization failed!");
+    return;    
+  }
+
+  File file = SD.open("/logfile.txt");
+  if(!file)
+  {
+    Serial.println("File does not exist");
+    Serial.println("Creating file...");
+    writeFile(SD, "/logfile.txt", "Millis, Voltage, StateOfCharge, X, Y, Z\r\n");
+  }
+  else
+  {
+    Serial.println("File exists");  
+  }
+  file.close();
+}
+
 void setup()
 {
   // Start serial communication
@@ -145,6 +239,9 @@ void setup()
 
   // Init lipo sensor
   initMAX17048();
+
+  // Init SD card
+  initSDCard();
 
   // Create the BLE Device
   BLEDevice::init(bleServerName);
@@ -218,7 +315,6 @@ void loop()
       Serial.print(" %,  ");
 
       // Read accelerometer data
-      sensors_event_t event;
       adxl.getEvent(&event);
 
       // Notify X axis
@@ -249,6 +345,8 @@ void loop()
       Serial.println(" m/s^2");
 
       lastTime = millis();
+
+      data_logging();
     }
   }
 }
