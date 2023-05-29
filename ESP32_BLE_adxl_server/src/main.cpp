@@ -14,6 +14,7 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL343.h>
 #include <FastLED.h>
+#include <SparkFun_MAX1704x_Fuel_Gauge_Arduino_Library.h>
 
 // BLE server name
 #define bleServerName "ESP32_ADXL343"
@@ -26,11 +27,19 @@
 #define BRIGHTNESS  25
 CRGB leds[NUM_LEDS];
 
+// Instantiate the accelerometer
 Adafruit_ADXL343 adxl = Adafruit_ADXL343(12345);
+
+// Instantiate the battery monitor
+SFE_MAX1704X lipo(MAX1704X_MAX17048);
 
 // Timer variables
 unsigned long lastTime = 0;
 unsigned long timerDelay = 5000;
+
+// Battery monitor variables
+double voltage = 0;
+double soc = 0;
 
 bool deviceConnected = false;
 
@@ -108,6 +117,20 @@ void initADXL()
   adxl.printSensorDetails();
 }
 
+void initMAX17048()
+{
+  // Set up the MAX17048 LiPo fuel gauge:
+  if (lipo.begin() == false) // Connect to the MAX17048 using the default wire port
+  {
+    Serial.println(F("MAX17048 not detected. Please check wiring. Freezing."));
+    while (1);
+  }
+
+  // Quick start restarts the MAX17043 in hopes of getting a more accurate
+	// guess for the SOC.
+	lipo.quickStart();
+}
+
 void setup()
 {
   // Start serial communication
@@ -119,6 +142,9 @@ void setup()
 
   // Init ADXL Sensor
   initADXL();
+
+  // Init lipo sensor
+  initMAX17048();
 
   // Create the BLE Device
   BLEDevice::init(bleServerName);
@@ -173,6 +199,24 @@ void loop()
   {
     if ((millis() - lastTime) > timerDelay)
     {
+      // Read battery monitor data
+      // lipo.getVoltage() returns a voltage value (e.g. 3.93)
+      voltage = lipo.getVoltage();
+      // lipo.getSOC() returns the estimated state of charge (e.g. 79%)
+      soc = lipo.getSOC();
+
+      static char voltageStr[5];
+      dtostrf(voltage, 4, 2, voltageStr);
+      Serial.print("Voltage: ");
+      Serial.print(voltageStr);
+      Serial.print(" V,  ");
+
+      static char socStr[7];
+      dtostrf(soc, 4, 2, socStr);
+      Serial.print("Charge: ");
+      Serial.print(socStr);
+      Serial.print(" %,  ");
+
       // Read accelerometer data
       sensors_event_t event;
       adxl.getEvent(&event);
