@@ -27,12 +27,15 @@
 #define COLOR_ORDER GRB
 #define CHIPSET     WS2812
 #define NUM_LEDS    1
-#define BRIGHTNESS  25
+#define BRIGHTNESS  0
 CRGB leds[NUM_LEDS];
 
 // SD card chip select
 const int sd_cs = 5;
 bool canLog = false;
+
+// Log filename
+#define LOG_FILENAME "/logfile.txt"
 
 // Instantiate the accelerometer
 Adafruit_ADXL343 adxl = Adafruit_ADXL343(12345);
@@ -93,11 +96,37 @@ void SetNotify(BLECharacteristic* bleCharacteristic, bool flag)
   }
 }
 
+void appendFile(fs::FS &fs, const char * path, const char * message)
+{
+  // Serial.printf("Appending to file: %s\n", path);
+
+  File file = fs.open(path, FILE_APPEND);
+  if(!file)
+  {
+    Serial.println("Failed to open file for appending");
+    return;
+  }
+
+  Data = String(millis()) + "," + String(message);
+  message = Data.c_str();
+
+  if(file.print(message))
+  {
+    // Serial.println("Message appended");
+  }
+  else
+  {
+    Serial.println("Append failed");
+  }
+  file.close();
+}
+
 // Setup callbacks onConnect and onDisconnect
 class MyServerCallbacks: public BLEServerCallbacks
 {
   void onConnect(BLEServer* pServer)
   {
+    appendFile(SD, LOG_FILENAME, "Connected\r\n");
     Serial.println("onConnect");
     deviceConnected = true;
     accelerometerXCharacteristic.setNotifyProperty(false);
@@ -107,6 +136,7 @@ class MyServerCallbacks: public BLEServerCallbacks
 
   void onDisconnect(BLEServer* pServer)
   {
+    appendFile(SD, LOG_FILENAME, "Disconnected\r\n");
     Serial.println("onDisconnect");
     deviceConnected = false;
     SetNotify(&accelerometerXCharacteristic, false);
@@ -142,34 +172,15 @@ void initMAX17048()
 	lipo.quickStart();
 }
 
-void appendFile(fs::FS &fs, const char * path, const char * message)
-{
-  // Serial.printf("Appending to file: %s\n", path);
-
-  File file = fs.open(path, FILE_APPEND);
-  if(!file)
-  {
-    Serial.println("Failed to open file for appending");
-    return;
-  }
-  if(file.print(message))
-  {
-    // Serial.println("Message appended");
-  }
-  else
-  {
-    Serial.println("Append failed");
-  }
-  file.close();
-}
-
 void logData()
 {
-  Data = String(millis()) + "," + String(voltage) + "," + String(soc) + "," + String(event.acceleration.x) + "," + 
+  Data = String(voltage) + "," + String(soc) + "," + String(event.acceleration.x) + "," + 
                 String(event.acceleration.x) + "," + String(event.acceleration.z) + "\r\n";
+  // Data = String(millis()) + "," + String(voltage) + "," + String(soc) + "," + String(event.acceleration.x) + "," + 
+  //               String(event.acceleration.x) + "," + String(event.acceleration.z) + "\r\n";
   // Serial.print("Save data: ");
   // Serial.println(Data);
-  appendFile(SD, "/logfile.txt", Data.c_str());
+  appendFile(SD, LOG_FILENAME, Data.c_str());
 }
 
 void writeFile(fs::FS &fs, const char * path, const char * message)
@@ -213,12 +224,12 @@ void initSDCard()
     return;    
   }
 
-  File file = SD.open("/logfile.txt");
+  File file = SD.open(LOG_FILENAME);
   if(!file)
   {
     Serial.println("File does not exist");
     Serial.println("Creating file...");
-    writeFile(SD, "/logfile.txt", "Millis, Voltage, StateOfCharge, X, Y, Z\r\n");
+    writeFile(SD, LOG_FILENAME, "Millis, Voltage, StateOfCharge, X, Y, Z\r\n");
   }
   else
   {
