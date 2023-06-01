@@ -24,7 +24,7 @@ static BLEUUID accelerometerXCharacteristicUUID("ba9f3faa-7939-436b-8197-7ccd1e6
 static BLEUUID accelerometerYCharacteristicUUID("0e1f1e2e-7381-4f30-8cff-7ff84eb93026");
 static BLEUUID accelerometerZCharacteristicUUID("1930a6a0-25ae-4ae4-a309-9d8c230c2358");
 
-// Status flags
+// BLE status flags
 static bool doConnect = false;
 static bool connected = false;
 static bool doScan = false;
@@ -47,6 +47,9 @@ const uint8_t notificationOff[] = {0x0, 0x0};
 Adafruit_NeoPixel pixels(NUM_PIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 Adafruit_SSD1327 display = Adafruit_SSD1327(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire);
+bool displayConfigured = false;
+bool displayEnabled = false;
+const int buttonPin = 0;
 
 char xAxisChar[10];
 char yAxisChar[10];
@@ -167,33 +170,37 @@ void printReadings()
 {
   Serial.print("printReadings: ");
 
-  display.clearDisplay();
+  if (displayConfigured && displayEnabled)
+  {
+    display.clearDisplay();
 
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.print("X Axis: ");
-  display.setTextSize(2);
-  display.setCursor(0, 10);
-  display.print(xAxisChar);
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print("X Axis: ");
+    display.setTextSize(2);
+    display.setCursor(0, 10);
+    display.print(xAxisChar);
+
+    display.setTextSize(1);
+    display.setCursor(0, 35);
+    display.print("Y Axis: ");
+    display.setTextSize(2);
+    display.setCursor(0, 45);
+    display.print(yAxisChar);
+
+    display.setTextSize(1);
+    display.setCursor(0, 70);
+    display.print("Z Axis: ");
+    display.setTextSize(2);
+    display.setCursor(0, 80);
+    display.print(zAxisChar);
+    display.display();
+  }
+
   Serial.print("X Axis: ");
   Serial.print(xAxisChar);
-
-  display.setTextSize(1);
-  display.setCursor(0, 35);
-  display.print("Y Axis: ");
-  display.setTextSize(2);
-  display.setCursor(0, 45);
-  display.print(yAxisChar);
   Serial.print(" Y Axis: ");
   Serial.print(yAxisChar);
-
-  display.setTextSize(1);
-  display.setCursor(0, 70);
-  display.print("Z Axis: ");
-  display.setTextSize(2);
-  display.setCursor(0, 80);
-  display.print(zAxisChar);
-  display.display();
   Serial.print(" Z Axis: ");
   Serial.print(zAxisChar);
   Serial.println("");
@@ -233,15 +240,28 @@ void setup()
   if (!display.begin(0x3D))
   {
     Serial.println(F("SSD1327 allocation failed"));
-    for(;;);
+    //for(;;);
+    displayConfigured = false;
+    displayEnabled = false;
+  }
+  else
+  {
+    displayConfigured = true;
+    displayEnabled = true;
   }
 
-  display.clearDisplay();
-  display.setTextSize(2);
-  display.setTextColor(SSD1327_WHITE, 0);
-  display.setCursor(0, 25);
-  display.print("BLE Client");
-  display.display();
+  if (displayConfigured && displayEnabled)
+  {
+    display.clearDisplay();
+    display.setTextSize(2);
+    display.setTextColor(SSD1327_WHITE, 0);
+    display.setCursor(0, 25);
+    display.print("BLE Client");
+    display.display();
+  }
+
+  // Input button
+  pinMode(buttonPin, INPUT_PULLUP);
 
   // Init BLE device
   BLEDevice::init("");
@@ -304,5 +324,10 @@ void loop()
     printReadings();
   }
 
-  delay(1000);
+  if (digitalRead(buttonPin) == LOW && displayConfigured)
+  {
+    displayEnabled = !displayEnabled;
+  }
+
+  // delay(1000);
 }
